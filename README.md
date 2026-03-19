@@ -1,4 +1,4 @@
-# cbk-appearance #
+# CBK Appearance #
 
 Standalone GTA Online-style appearance creator/editor for FiveM.
 
