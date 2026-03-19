@@ -1,8 +1,9 @@
 # CBK Appearance #
+as of 04/18/2026
 
 Standalone GTA Online-style appearance creator/editor for FiveM.
 
-Current resource version: `1.7.0`
+Current resource version: `v1.7.0`
 
 ## Features
 - Standalone resource with no framework dependency
