@@ -1,0 +1,188 @@
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  font-family: Inter, Arial, sans-serif;
+  color: #eef3ff;
+  background: transparent;
+}
+body { overflow: hidden; }
+.hidden { display: none !important; }
+
+#app {
+  width: 26%;
+  height: 82%;
+  display: grid;
+  grid-template-columns: 355px 1fr;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top left, rgba(48, 76, 136, 0.40),  black 100%, transparent 0%),
+    linear-gradient(135deg, rgba(8, 12, 18, 0.80), rgba(8, 12, 18, 0.28));
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 55px;
+  padding: 20px;
+  background: rgba(5, 8, 14, 0.84);
+  border-right: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(55px);
+}
+.brand {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+.logo {
+  width: 55px;
+  height: 55px;
+  border-radius: 15px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  background: linear-gradient(135deg, #7bb4ff, #5765ff);
+  color: #07111f;
+}
+.eyebrow {
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: #94a5d6;
+}
+h1, h2, h3, p { margin: 0; }
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.step {
+  width: 100%;
+  border: 4px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: #eef3ff;
+  border-radius: 15px;
+  padding: 15px 15px;
+  text-align: center;
+  cursor: pointer;
+}
+.step.active {
+  background: linear-gradient(135deg, rgba(94,118,255,0.32), rgba(123,180,255,0.24));
+  border-color: rgba(123,180,255,0.5);
+}
+.quick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.quick button, .footer-actions button, .control button {
+  border: 2px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.06);
+  color: #eef3ff;
+  padding: 15px 15px;
+  border-radius: 15px;
+  cursor: pointer;
+}
+.quick button:hover, .step:hover, .footer-actions button:hover, .control button:hover {
+  background: rgba(255,255,255,0.10);
+}
+.footer-actions {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.primary {
+  background: linear-gradient(135deg, #6ea8ff, #6a6cff) !important;
+  color: #07111f !important;
+  font-weight: 700;
+}
+.ghost {
+  background: rgba(255,255,255,0.04) !important;
+}
+.panel {
+  padding: 10px;
+  overflow: hidden;
+}
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.pill {
+  padding: 10px 20px;
+  border-radius: 15px;
+  background: rgba(255,255,255,0.08);
+  color: #d2defc;
+  font-size: 25px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 420px));
+  gap: 10px;
+  align-content: start;
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+  padding-right: 8px;
+}
+.control {
+  background: rgba(5, 8, 14, 0.72);
+  border: 5px solid rgba(255,255,255,0.08);
+  border-radius: 15px;
+  padding: 10px;
+}
+.control label {
+  display: block;
+  margin-bottom: 10px;
+  color: #c7d4f5;
+  font-size: 12px;
+}
+.control .meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+.control input[type="range"] {
+  width: 100%;
+}
+.control input[type="number"], .control select {
+  width: 100%;
+  padding: 10px 25px;
+  border-radius: 10px;
+  border: 4px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  color: #eef3ff;
+}
+.inline {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+
+.quick button.active {
+  background: linear-gradient(135deg, rgba(94,118,255,0.32), rgba(123,180,255,0.24));
+  border-color: rgba(123,180,255,0.5);
+}
+.quick button:disabled, .footer-actions button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+.status {
+  min-height: 1px;
+  border-radius: 15px;
+  padding: 25px 45px;
+  background: rgba(255,255,255,0.05);
+  border: 8px solid rgba(255,255,255,0.08);
+  color: #c9d7fb;
+  line-height: 1.4;
+}
+.status.error {
+  border-color: rgba(255, 102, 102, 0.4);
+  background: rgba(120, 24, 24, 0.28);
+  color: #ffd3d3;
+}
