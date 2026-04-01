@@ -59,6 +59,7 @@ Important options:
 - `Config.BasicEditorOverlaySlots` / `Config.ExtendedEditorOverlaySlots`: controls which overlay IDs appear in each mode
 - `Config.BasicEditorComponentSlots` / `Config.ExtendedEditorComponentSlots`: controls which clothing component slots appear in each mode
 - `Config.BasicEditorPropSlots` / `Config.ExtendedEditorPropSlots`: controls which prop slots appear in each mode
+- `Config.OptionLabels`: optional per-model/per-slot name overrides for hair styles, overlays, clothing items, and props
 - `Config.EnableRoutingBucketIsolation`: temporarily moves players to `Config.CreatorBucket` while editing
 
 ## Persistence And Authority

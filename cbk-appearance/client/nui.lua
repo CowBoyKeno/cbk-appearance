@@ -7,6 +7,10 @@ local function sendUI(payload)
     SendNUIMessage(payload)
 end
 
+local function ensureTable(value)
+    return type(value) == 'table' and value or {}
+end
+
 local function titleize(raw)
     local label = tostring(raw or ''):gsub('_', ' ')
     return (label:gsub('(%a)([%w]*)', function(first, rest)
@@ -16,6 +20,47 @@ end
 
 local function getAllowedModels()
     return ClientUtils.GetAllowedModels()
+end
+
+local function getOptionLabels(group, key)
+    local labels = ensureTable(ensureTable(Config.OptionLabels)[group])
+    return ensureTable(labels[tostring(key)] or labels[key])
+end
+
+local function buildIndexedOptions(maxIndex, prefix, labelMap, includeNone)
+    local options = {}
+    labelMap = ensureTable(labelMap)
+
+    if includeNone then
+        options[#options + 1] = {
+            value = -1,
+            label = 'None'
+        }
+    end
+
+    for index = 0, maxIndex do
+        local custom = labelMap[tostring(index)] or labelMap[index]
+        options[#options + 1] = {
+            value = index,
+            label = custom or ('%s %02d'):format(prefix, index)
+        }
+    end
+
+    return options
+end
+
+local function buildTextureMaxByDrawable(profileSlot, maxDrawable, fallbackMax)
+    local textureMaxByDrawable = {}
+    local textures = ensureTable(ensureTable(profileSlot).textures)
+
+    for drawable = 0, maxDrawable do
+        local value = math.floor(tonumber(textures[tostring(drawable)] or textures[drawable]) or fallbackMax)
+        if value < 0 then value = 0 end
+        if value > fallbackMax then value = fallbackMax end
+        textureMaxByDrawable[tostring(drawable)] = value
+    end
+
+    return textureMaxByDrawable
 end
 
 local function buildModelOptions()
@@ -45,11 +90,12 @@ local function buildOverlayControls()
     for _, slot in ipairs(slots or {}) do
         local cfg = Config.HeadOverlays[slot]
         if cfg then
+            local label = titleize(cfg.name)
             controls[#controls + 1] = {
                 id = tostring(slot),
-                label = titleize(cfg.name),
-                maxStyle = cfg.maxIndex,
-                colorType = cfg.colorType or 0
+                label = label,
+                colorType = cfg.colorType or 0,
+                styleOptions = buildIndexedOptions(cfg.maxIndex, ('%s Style'):format(label), getOptionLabels('overlays', slot), false)
             }
         end
     end
@@ -57,17 +103,25 @@ local function buildOverlayControls()
     return controls
 end
 
-local function buildComponentControls()
+local function buildComponentControlsForModel(profile)
     local slots = Config.ShowExtendedEditorOptions and Config.ExtendedEditorComponentSlots or Config.BasicEditorComponentSlots
     local controls = {}
+    local components = ensureTable(profile and profile.components)
 
     for _, slot in ipairs(slots or {}) do
         local cfg = Config.ComponentSlots[slot]
         if cfg and slot ~= 2 then
+            local label = titleize(cfg.name)
+            local profileSlot = ensureTable(components[tostring(slot)] or components[slot])
+            local maxDrawable = math.floor(tonumber(profileSlot.maxDrawable) or cfg.maxDrawable)
+            if maxDrawable < 0 then maxDrawable = 0 end
+            if maxDrawable > cfg.maxDrawable then maxDrawable = cfg.maxDrawable end
+
             controls[#controls + 1] = {
                 id = tostring(slot),
-                label = titleize(cfg.name),
-                maxDrawable = cfg.maxDrawable,
+                label = label,
+                drawableOptions = buildIndexedOptions(maxDrawable, label, getOptionLabels('components', slot), false),
+                textureMaxByDrawable = buildTextureMaxByDrawable(profileSlot, maxDrawable, cfg.maxTexture),
                 maxTexture = cfg.maxTexture
             }
         end
@@ -76,35 +130,69 @@ local function buildComponentControls()
     return controls
 end
 
-local function buildPropControls()
+local function buildPropControlsForModel(profile)
     local slots = Config.ShowExtendedEditorOptions and Config.ExtendedEditorPropSlots or Config.BasicEditorPropSlots
     local controls = {}
+    local props = ensureTable(profile and profile.props)
 
     for _, slot in ipairs(slots or {}) do
         local cfg = Config.PropSlots[slot]
         if cfg then
+            local label = titleize(cfg.name)
+            local profileSlot = ensureTable(props[tostring(slot)] or props[slot])
+            local maxDrawable = math.floor(tonumber(profileSlot.maxDrawable) or cfg.maxDrawable)
+            if maxDrawable < -1 then maxDrawable = -1 end
+            if maxDrawable > cfg.maxDrawable then maxDrawable = cfg.maxDrawable end
+
             controls[#controls + 1] = {
                 id = tostring(slot),
-                label = titleize(cfg.name),
-                maxDrawable = cfg.maxDrawable,
+                label = label,
+                drawableOptions = buildIndexedOptions(maxDrawable, label, getOptionLabels('props', slot), true),
+                textureMaxByDrawable = maxDrawable >= 0 and buildTextureMaxByDrawable(profileSlot, maxDrawable, cfg.maxTexture) or {},
                 maxTexture = cfg.maxTexture
             }
         end
     end
 
     return controls
+end
+
+local function buildModelProfile(modelName)
+    local profile = ClientUtils.GetOrBuildVariationProfile(modelName)
+    local hairProfile = ensureTable(ensureTable(profile and profile.components)['2'])
+    local hairMaxDrawable = math.floor(tonumber(hairProfile.maxDrawable) or ensureTable(Config.ComponentSlots[2]).maxDrawable or 255)
+
+    if hairMaxDrawable < 0 then hairMaxDrawable = 0 end
+    if hairMaxDrawable > ensureTable(Config.ComponentSlots[2]).maxDrawable then
+        hairMaxDrawable = ensureTable(Config.ComponentSlots[2]).maxDrawable
+    end
+
+    return {
+        hairStyleOptions = buildIndexedOptions(hairMaxDrawable, 'Hair Style', getOptionLabels('hairStyles', modelName), false),
+        componentControls = buildComponentControlsForModel(profile),
+        propControls = buildPropControlsForModel(profile)
+    }
+end
+
+local function buildModelProfiles()
+    local profiles = {}
+
+    for _, modelName in ipairs(getAllowedModels()) do
+        profiles[modelName] = buildModelProfile(modelName)
+    end
+
+    return profiles
 end
 
 local function buildEditorConfig()
     return {
         modelOptions = buildModelOptions(),
         allowedModels = getAllowedModels(),
-        maxHairColor = Config.MaxHairColor,
-        maxEyeColor = Config.MaxEyeColor,
-        overlays = Config.HeadOverlays,
+        heritageOptions = ClientUtils.GetHeritageOptions(Config.Heritage.maxParentIndex),
+        hairColorOptions = ClientUtils.GetHairColorOptions(Config.MaxHairColor),
+        eyeColorOptions = ClientUtils.GetEyeColorOptions(Config.MaxEyeColor),
         overlayControls = buildOverlayControls(),
-        componentControls = buildComponentControls(),
-        propControls = buildPropControls(),
+        profiles = buildModelProfiles(),
         showExtendedEditorOptions = Config.ShowExtendedEditorOptions
     }
 end

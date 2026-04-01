@@ -80,6 +80,16 @@ Config.ExtendedEditorComponentSlots = { 1, 3, 4, 5, 6, 7, 8, 9, 10, 11 }
 Config.BasicEditorPropSlots = { 0, 1 }
 Config.ExtendedEditorPropSlots = { 0, 1, 2, 6, 7 }
 
+Config.OptionLabels = {
+    hairStyles = {
+        mp_m_freemode_01 = {},
+        mp_f_freemode_01 = {}
+    },
+    overlays = {},
+    components = {},
+    props = {}
+}
+
 Config.DefaultAppearance = {
     version = 1,
     model = 'mp_m_freemode_01',

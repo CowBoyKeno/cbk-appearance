@@ -28,11 +28,11 @@ const sections = [
 ];
 
 const defaultOverlayControls = [
-  { id: '1', label: 'Facial Hair', maxStyle: 28, colorType: 1 },
-  { id: '2', label: 'Eyebrows', maxStyle: 33, colorType: 1 },
-  { id: '4', label: 'Makeup', maxStyle: 74, colorType: 2 },
-  { id: '5', label: 'Blush', maxStyle: 6, colorType: 2 },
-  { id: '8', label: 'Lipstick', maxStyle: 9, colorType: 2 }
+  { id: '1', label: 'Facial Hair', styleOptions: [] },
+  { id: '2', label: 'Eyebrows', styleOptions: [] },
+  { id: '4', label: 'Makeup', styleOptions: [] },
+  { id: '5', label: 'Blush', styleOptions: [] },
+  { id: '8', label: 'Lipstick', styleOptions: [] }
 ];
 
 const heritageLabels = {
@@ -71,16 +71,16 @@ const defaultModelOptions = [
 ];
 
 const defaultComponentControls = [
-  { id: '3', label: 'Torso', maxDrawable: 255, maxTexture: 63 },
-  { id: '4', label: 'Legs', maxDrawable: 255, maxTexture: 63 },
-  { id: '6', label: 'Shoes', maxDrawable: 255, maxTexture: 63 },
-  { id: '8', label: 'Undershirt', maxDrawable: 255, maxTexture: 63 },
-  { id: '11', label: 'Top', maxDrawable: 255, maxTexture: 63 }
+  { id: '3', label: 'Torso', drawableOptions: [], textureMaxByDrawable: {}, maxTexture: 63 },
+  { id: '4', label: 'Legs', drawableOptions: [], textureMaxByDrawable: {}, maxTexture: 63 },
+  { id: '6', label: 'Shoes', drawableOptions: [], textureMaxByDrawable: {}, maxTexture: 63 },
+  { id: '8', label: 'Undershirt', drawableOptions: [], textureMaxByDrawable: {}, maxTexture: 63 },
+  { id: '11', label: 'Top', drawableOptions: [], textureMaxByDrawable: {}, maxTexture: 63 }
 ];
 
 const defaultPropControls = [
-  { id: '0', label: 'Hat', maxDrawable: 63, maxTexture: 63 },
-  { id: '1', label: 'Glasses', maxDrawable: 63, maxTexture: 63 }
+  { id: '0', label: 'Hat', drawableOptions: [{ value: -1, label: 'None' }], textureMaxByDrawable: {}, maxTexture: 63 },
+  { id: '1', label: 'Glasses', drawableOptions: [{ value: -1, label: 'None' }], textureMaxByDrawable: {}, maxTexture: 63 }
 ];
 
 function deepClone(v) {
@@ -91,6 +91,21 @@ function titleize(value) {
   return String(value || '')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function clampNumber(value, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return min;
+  return Math.min(max, Math.max(min, numeric));
+}
+
+function valueMatches(a, b) {
+  return String(a) === String(b);
+}
+
+function parseInteger(value, fallback = 0) {
+  const parsed = parseInt(value, 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
 }
 
 function getModelOptions() {
@@ -109,20 +124,154 @@ function getOverlayControls() {
   return defaultOverlayControls;
 }
 
-function getComponentControls() {
-  if (Array.isArray(state.config?.componentControls) && state.config.componentControls.length) {
-    return state.config.componentControls;
+function getHeritageOptions() {
+  if (Array.isArray(state.config?.heritageOptions) && state.config.heritageOptions.length) {
+    return state.config.heritageOptions;
   }
 
-  return defaultComponentControls;
+  return Array.from({ length: 46 }, (_, index) => ({
+    value: index,
+    label: `Parent ${index}`
+  }));
+}
+
+function getHairColorOptions() {
+  if (Array.isArray(state.config?.hairColorOptions) && state.config.hairColorOptions.length) {
+    return state.config.hairColorOptions;
+  }
+
+  return Array.from({ length: 64 }, (_, index) => ({
+    value: index,
+    label: `Hair Color ${index}`
+  }));
+}
+
+function getEyeColorOptions() {
+  if (Array.isArray(state.config?.eyeColorOptions) && state.config.eyeColorOptions.length) {
+    return state.config.eyeColorOptions;
+  }
+
+  return Array.from({ length: 32 }, (_, index) => ({
+    value: index,
+    label: `Eye Color ${index}`
+  }));
+}
+
+function getActiveProfile() {
+  const profiles = state.config?.profiles;
+  if (!profiles || !state.appearance?.model) {
+    return null;
+  }
+
+  return profiles[state.appearance.model] || null;
+}
+
+function buildIndexedOptions(maxValue, prefix, includeNone = false) {
+  const safeMax = Math.max(0, Number(maxValue) || 0);
+  const options = [];
+
+  if (includeNone) {
+    options.push({ value: -1, label: 'None' });
+  }
+
+  for (let index = 0; index <= safeMax; index += 1) {
+    options.push({
+      value: index,
+      label: `${prefix} ${index}`
+    });
+  }
+
+  return options;
+}
+
+function buildTextureOptions(maxTexture) {
+  return buildIndexedOptions(Math.max(0, Number(maxTexture) || 0), 'Texture');
+}
+
+function getHairStyleOptions() {
+  const profile = getActiveProfile();
+  if (Array.isArray(profile?.hairStyleOptions) && profile.hairStyleOptions.length) {
+    return profile.hairStyleOptions;
+  }
+
+  return buildIndexedOptions(255, 'Hair Style');
+}
+
+function getComponentControls() {
+  const profile = getActiveProfile();
+  if (Array.isArray(profile?.componentControls) && profile.componentControls.length) {
+    return profile.componentControls;
+  }
+
+  return defaultComponentControls.map((control) => ({
+    ...control,
+    drawableOptions: buildIndexedOptions(255, control.label),
+    textureMaxByDrawable: {}
+  }));
 }
 
 function getPropControls() {
-  if (Array.isArray(state.config?.propControls) && state.config.propControls.length) {
-    return state.config.propControls;
+  const profile = getActiveProfile();
+  if (Array.isArray(profile?.propControls) && profile.propControls.length) {
+    return profile.propControls;
   }
 
-  return defaultPropControls;
+  return defaultPropControls.map((control) => ({
+    ...control,
+    drawableOptions: buildIndexedOptions(63, control.label, true),
+    textureMaxByDrawable: {}
+  }));
+}
+
+function getTextureMax(control, drawable) {
+  const raw = control?.textureMaxByDrawable?.[String(drawable)];
+  if (Number.isFinite(raw)) {
+    return raw;
+  }
+
+  return parseInteger(raw, Number(control?.maxTexture) || 0);
+}
+
+function getMaxOptionValue(options, fallback = 0) {
+  if (!Array.isArray(options) || !options.length) {
+    return fallback;
+  }
+
+  return options.reduce((max, option) => {
+    const value = Number(option.value);
+    return Number.isFinite(value) ? Math.max(max, value) : max;
+  }, fallback);
+}
+
+function findOption(options, value) {
+  return (options || []).find((option) => valueMatches(option.value, value)) || null;
+}
+
+function clampAppearanceForCurrentProfile() {
+  if (!state.appearance) return;
+
+  const hairOptions = getHairStyleOptions();
+  state.appearance.hair.style = clampNumber(state.appearance.hair.style, 0, getMaxOptionValue(hairOptions, 0));
+
+  getComponentControls().forEach((control) => {
+    const slot = String(control.id);
+    state.appearance.components[slot] = state.appearance.components[slot] || { drawable: 0, texture: 0 };
+    const component = state.appearance.components[slot];
+    component.drawable = clampNumber(component.drawable, 0, getMaxOptionValue(control.drawableOptions, 0));
+    component.texture = clampNumber(component.texture, 0, getTextureMax(control, component.drawable));
+  });
+
+  getPropControls().forEach((control) => {
+    const slot = String(control.id);
+    state.appearance.props[slot] = state.appearance.props[slot] || { drawable: -1, texture: 0 };
+    const prop = state.appearance.props[slot];
+    prop.drawable = clampNumber(prop.drawable, -1, getMaxOptionValue(control.drawableOptions, -1));
+    if (prop.drawable === -1) {
+      prop.texture = 0;
+    } else {
+      prop.texture = clampNumber(prop.texture, 0, getTextureMax(control, prop.drawable));
+    }
+  });
 }
 
 async function nui(name, data = {}) {
@@ -273,39 +422,101 @@ function rangeControl(label, min, max, step, value, onInput) {
   return controlWrapper(label, wrapper);
 }
 
-function numberControl(label, value, onInput, min = 0, max = 255) {
+function selectControl(label, options, value, onInput, extra = {}) {
   const wrapper = document.createElement('div');
-  wrapper.innerHTML = `<input type="number" min="${min}" max="${max}" value="${value}" />`;
-  wrapper.querySelector('input').oninput = (e) => onInput(parseInt(e.target.value || '0', 10));
-  return controlWrapper(label, wrapper);
-}
+  const meta = document.createElement('div');
+  meta.className = 'meta';
 
-function selectControl(label, options, value, onInput) {
-  const wrapper = document.createElement('div');
+  const selectedLabel = document.createElement('span');
+  const selectedValue = document.createElement('span');
+  meta.appendChild(selectedLabel);
+  meta.appendChild(selectedValue);
+  wrapper.appendChild(meta);
+
+  const previewRow = document.createElement('div');
+  previewRow.className = 'choice-preview hidden';
+
+  const swatch = document.createElement('span');
+  swatch.className = 'swatch';
+  const hint = document.createElement('span');
+  hint.className = 'hint';
+  previewRow.appendChild(swatch);
+  previewRow.appendChild(hint);
+  wrapper.appendChild(previewRow);
+
   const select = document.createElement('select');
-  options.forEach(opt => {
+  (options || []).forEach((opt) => {
     const option = document.createElement('option');
     option.value = opt.value;
     option.textContent = opt.label;
-    if (String(opt.value) === String(value)) option.selected = true;
+    if (valueMatches(opt.value, value)) option.selected = true;
     select.appendChild(option);
   });
-  select.onchange = (e) => onInput(e.target.value);
+
+  const syncDisplay = (rawValue) => {
+    const current = findOption(options, rawValue);
+    selectedLabel.textContent = current?.label || extra.fallbackLabel || String(rawValue);
+    selectedValue.textContent = typeof extra.valueText === 'function' ? extra.valueText(rawValue, current) : '';
+
+    const swatchHex = typeof extra.getSwatch === 'function' ? extra.getSwatch(current, rawValue) : '';
+    const hintText = typeof extra.getHint === 'function' ? extra.getHint(current, rawValue) : '';
+    previewRow.classList.toggle('hidden', !swatchHex && !hintText);
+
+    if (swatchHex) {
+      swatch.style.background = swatchHex;
+      swatch.classList.remove('hidden');
+    } else {
+      swatch.classList.add('hidden');
+    }
+
+    hint.textContent = hintText || '';
+  };
+
+  syncDisplay(value);
+
+  select.onchange = (e) => {
+    const parsedValue = typeof extra.parseValue === 'function'
+      ? extra.parseValue(e.target.value)
+      : e.target.value;
+    syncDisplay(parsedValue);
+    onInput(parsedValue);
+  };
+
   wrapper.appendChild(select);
   return controlWrapper(label, wrapper);
+}
+
+function namedNumberSelect(label, options, value, onInput, extra = {}) {
+  return selectControl(label, options, value, onInput, {
+    parseValue: (raw) => parseInteger(raw, 0),
+    valueText: (raw) => raw === -1 ? 'Clear' : `#${raw}`,
+    ...extra
+  });
+}
+
+function colorSelect(label, options, value, onInput) {
+  return selectControl(label, options, value, onInput, {
+    parseValue: (raw) => parseInteger(raw, 0),
+    valueText: (raw) => `#${raw}`,
+    getSwatch: (current) => current?.hex || '',
+    getHint: (current) => current?.hex || ''
+  });
 }
 
 function renderIdentity(container) {
   container.appendChild(selectControl('Model', getModelOptions(), state.appearance.model, (v) => {
     state.appearance.model = v;
+    clampAppearanceForCurrentProfile();
+    render();
     preview();
   }));
 
+  const heritageOptions = getHeritageOptions();
   ['shapeFirst', 'shapeSecond', 'skinFirst', 'skinSecond'].forEach((key) => {
-    container.appendChild(numberControl(heritageLabels[key] || key, state.appearance.heritage[key], (v) => {
+    container.appendChild(namedNumberSelect(heritageLabels[key] || key, heritageOptions, state.appearance.heritage[key], (v) => {
       state.appearance.heritage[key] = v;
       preview();
-    }, 0, 45));
+    }));
   });
 
   container.appendChild(rangeControl('Resemblance', 0, 1, 0.01, state.appearance.heritage.shapeMix, (v) => {
@@ -319,7 +530,7 @@ function renderIdentity(container) {
 }
 
 function renderFace(container) {
-  for (let i = 0; i < state.appearance.faceFeatures.length; i++) {
+  for (let i = 0; i < state.appearance.faceFeatures.length; i += 1) {
     const label = faceFeatureLabels[i] || `Feature ${i + 1}`;
     container.appendChild(rangeControl(label, -1, 1, 0.01, state.appearance.faceFeatures[i], (v) => {
       state.appearance.faceFeatures[i] = v;
@@ -329,49 +540,54 @@ function renderFace(container) {
 }
 
 function renderHair(container) {
-  const maxHairColor = Number.isFinite(state.config?.maxHairColor) ? state.config.maxHairColor : 63;
-  const maxEyeColor = Number.isFinite(state.config?.maxEyeColor) ? state.config.maxEyeColor : 31;
-
-  container.appendChild(numberControl('Hair Style', state.appearance.hair.style, (v) => {
+  container.appendChild(namedNumberSelect('Hair Style', getHairStyleOptions(), state.appearance.hair.style, (v) => {
     state.appearance.hair.style = v;
     preview();
   }));
-  container.appendChild(numberControl('Hair Color', state.appearance.hair.color, (v) => {
+
+  container.appendChild(colorSelect('Hair Color', getHairColorOptions(), state.appearance.hair.color, (v) => {
     state.appearance.hair.color = v;
     preview();
-  }, 0, maxHairColor));
-  container.appendChild(numberControl('Hair Highlight', state.appearance.hair.highlight, (v) => {
+  }));
+
+  container.appendChild(colorSelect('Hair Highlight', getHairColorOptions(), state.appearance.hair.highlight, (v) => {
     state.appearance.hair.highlight = v;
     preview();
-  }, 0, maxHairColor));
-  container.appendChild(numberControl('Eye Color', state.appearance.eyes.color, (v) => {
+  }));
+
+  container.appendChild(colorSelect('Eye Color', getEyeColorOptions(), state.appearance.eyes.color, (v) => {
     state.appearance.eyes.color = v;
     preview();
-  }, 0, maxEyeColor));
+  }));
 }
 
 function renderOverlays(container) {
-  const maxHairColor = Number.isFinite(state.config?.maxHairColor) ? state.config.maxHairColor : 63;
+  const hairColors = getHairColorOptions();
 
   getOverlayControls().forEach((control) => {
     const id = String(control.id);
     const label = control.label || titleize(id);
     state.appearance.headOverlays[id] = state.appearance.headOverlays[id] || { style: 0, opacity: 0, color: 0, secondColor: 0 };
     const overlay = state.appearance.headOverlays[id];
-    container.appendChild(numberControl(`${label} Style`, overlay.style, (v) => {
+    const styleOptions = Array.isArray(control.styleOptions) && control.styleOptions.length
+      ? control.styleOptions
+      : buildIndexedOptions(255, `${label} Style`);
+
+    container.appendChild(namedNumberSelect(`${label} Style`, styleOptions, overlay.style, (v) => {
       overlay.style = v;
       preview();
-    }, 0, Number.isFinite(control.maxStyle) ? control.maxStyle : 255));
+    }));
+
     container.appendChild(rangeControl(`${label} Opacity`, 0, 1, 0.01, overlay.opacity, (v) => {
       overlay.opacity = v;
       preview();
     }));
 
     if ((control.colorType || 0) > 0) {
-      container.appendChild(numberControl(`${label} Color`, overlay.color, (v) => {
+      container.appendChild(colorSelect(`${label} Color`, hairColors, overlay.color, (v) => {
         overlay.color = v;
         preview();
-      }, 0, maxHairColor));
+      }));
     }
   });
 }
@@ -380,31 +596,47 @@ function renderClothing(container) {
   getComponentControls().forEach((control) => {
     const slot = String(control.id);
     state.appearance.components[slot] = state.appearance.components[slot] || { drawable: 0, texture: 0 };
-    const c = state.appearance.components[slot];
+    const component = state.appearance.components[slot];
     const label = control.label || `Component ${slot}`;
-    container.appendChild(numberControl(`${label} Drawable`, c.drawable, (v) => {
-      c.drawable = v;
+
+    container.appendChild(namedNumberSelect(`${label} Item`, control.drawableOptions, component.drawable, (v) => {
+      component.drawable = v;
+      component.texture = Math.min(component.texture, getTextureMax(control, v));
+      render();
       preview();
-    }, 0, Number.isFinite(control.maxDrawable) ? control.maxDrawable : 255));
-    container.appendChild(numberControl(`${label} Texture`, c.texture, (v) => {
-      c.texture = v;
+    }));
+
+    container.appendChild(namedNumberSelect(`${label} Texture`, buildTextureOptions(getTextureMax(control, component.drawable)), component.texture, (v) => {
+      component.texture = v;
       preview();
-    }, 0, Number.isFinite(control.maxTexture) ? control.maxTexture : 63));
+    }, {
+      fallbackLabel: 'Texture',
+      valueText: (raw) => `#${raw}`
+    }));
   });
 
   getPropControls().forEach((control) => {
     const slot = String(control.id);
     state.appearance.props[slot] = state.appearance.props[slot] || { drawable: -1, texture: 0 };
-    const p = state.appearance.props[slot];
+    const prop = state.appearance.props[slot];
     const label = control.label || `Prop ${slot}`;
-    container.appendChild(numberControl(`${label} Drawable (-1 clears)`, p.drawable, (v) => {
-      p.drawable = v;
+
+    container.appendChild(namedNumberSelect(`${label} Item`, control.drawableOptions, prop.drawable, (v) => {
+      prop.drawable = v;
+      prop.texture = v === -1 ? 0 : Math.min(prop.texture, getTextureMax(control, v));
+      render();
       preview();
-    }, -1, Number.isFinite(control.maxDrawable) ? control.maxDrawable : 63));
-    container.appendChild(numberControl(`${label} Texture`, p.texture, (v) => {
-      p.texture = v;
+    }, {
+      valueText: (raw) => raw === -1 ? 'Clear' : `#${raw}`
+    }));
+
+    container.appendChild(namedNumberSelect(`${label} Texture`, buildTextureOptions(prop.drawable === -1 ? 0 : getTextureMax(control, prop.drawable)), prop.texture, (v) => {
+      prop.texture = v;
       preview();
-    }, 0, Number.isFinite(control.maxTexture) ? control.maxTexture : 63));
+    }, {
+      fallbackLabel: 'Texture',
+      valueText: (raw) => `#${raw}`
+    }));
   });
 }
 
@@ -460,6 +692,7 @@ window.addEventListener('message', (event) => {
     state.section = 'identity';
     state.saving = false;
     state.activeCamera = 'full';
+    clampAppearanceForCurrentProfile();
     setOpen(true);
     setStatus();
     render();
