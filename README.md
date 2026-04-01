@@ -1,5 +1,5 @@
 # CBK Appearance #
-as of 04/18/2026
+as of 03/31/2026
 
 Standalone GTA Online-style appearance creator/editor for FiveM.
 
