@@ -2,7 +2,7 @@
 
 Standalone GTA Online-style appearance creator/editor for FiveM.
 
-Current resource version: `1.7.0`
+Current resource version: `2.0.0`
 
 ## Features
 - Standalone resource with no framework dependency
