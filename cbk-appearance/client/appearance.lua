@@ -9,6 +9,31 @@ end
 function Appearance.Normalize(input)
     local appearance = AppearanceSchema.GetDefault()
     if type(input) ~= 'table' then
+        for overlayId in pairs(Config.HeadOverlays or {}) do
+            appearance.headOverlays[tostring(overlayId)] = appearance.headOverlays[tostring(overlayId)] or {
+                style = 0,
+                opacity = 0.0,
+                color = 0,
+                secondColor = 0,
+            }
+        end
+
+        for slot in pairs(Config.ComponentSlots or {}) do
+            if slot ~= 2 then
+                appearance.components[tostring(slot)] = appearance.components[tostring(slot)] or {
+                    drawable = 0,
+                    texture = 0,
+                }
+            end
+        end
+
+        for slot in pairs(Config.PropSlots or {}) do
+            appearance.props[tostring(slot)] = appearance.props[tostring(slot)] or {
+                drawable = -1,
+                texture = 0,
+            }
+        end
+
         return appearance
     end
 
@@ -76,6 +101,31 @@ function Appearance.Normalize(input)
         end
     end
 
+    for overlayId in pairs(Config.HeadOverlays or {}) do
+        appearance.headOverlays[tostring(overlayId)] = appearance.headOverlays[tostring(overlayId)] or {
+            style = 0,
+            opacity = 0.0,
+            color = 0,
+            secondColor = 0,
+        }
+    end
+
+    for slot in pairs(Config.ComponentSlots or {}) do
+        if slot ~= 2 then
+            appearance.components[tostring(slot)] = appearance.components[tostring(slot)] or {
+                drawable = 0,
+                texture = 0,
+            }
+        end
+    end
+
+    for slot in pairs(Config.PropSlots or {}) do
+        appearance.props[tostring(slot)] = appearance.props[tostring(slot)] or {
+            drawable = -1,
+            texture = 0,
+        }
+    end
+
     return appearance
 end
 
@@ -115,6 +165,135 @@ function Appearance.ClampToPedVariations(appearance, ped)
     return clampedAppearance
 end
 
+local function isFreemodePedModel(ped)
+    local model = GetEntityModel(ped)
+    return model == joaat('mp_m_freemode_01') or model == joaat('mp_f_freemode_01')
+end
+
+local function waitForPedVariations(ped)
+    local timeoutAt = GetGameTimer() + 750
+
+    while DoesEntityExist(ped) and GetGameTimer() < timeoutAt do
+        local hairVariations = GetNumberOfPedDrawableVariations(ped, 2)
+        local torsoVariations = GetNumberOfPedDrawableVariations(ped, 3)
+        if hairVariations > 0 and torsoVariations > 0 then
+            break
+        end
+
+        Wait(0)
+    end
+end
+
+local function applyHeadBlend(ped, heritage)
+    if type(heritage) ~= 'table' then
+        return
+    end
+
+    SetPedHeadBlendData(
+        ped,
+        heritage.shapeFirst,
+        heritage.shapeSecond,
+        0,
+        heritage.skinFirst,
+        heritage.skinSecond,
+        0,
+        heritage.shapeMix + 0.0,
+        heritage.skinMix + 0.0,
+        0.0,
+        false
+    )
+end
+
+local function applyFaceFeatures(ped, faceFeatures)
+    if type(faceFeatures) ~= 'table' then
+        return
+    end
+
+    for i = 1, Config.FaceFeatureCount do
+        SetPedFaceFeature(ped, i - 1, (tonumber(faceFeatures[i]) or 0.0) + 0.0)
+    end
+end
+
+local function applyComponents(ped, components)
+    if type(components) ~= 'table' then
+        return
+    end
+
+    local freemodePed = isFreemodePedModel(ped)
+    for slot, data in pairs(components) do
+        local componentSlot = tonumber(slot)
+        if componentSlot and type(data) == 'table' then
+            if not (freemodePed and (componentSlot == 0 or componentSlot == 2)) then
+                SetPedComponentVariation(ped, componentSlot, tonumber(data.drawable) or 0, tonumber(data.texture) or 0, 0)
+            end
+        end
+    end
+end
+
+local function applyProps(ped, props)
+    if type(props) ~= 'table' then
+        return
+    end
+
+    for slot, data in pairs(props) do
+        local propSlot = tonumber(slot)
+        if propSlot and type(data) == 'table' then
+            local drawable = tonumber(data.drawable) or -1
+            local texture = tonumber(data.texture) or 0
+
+            if drawable == -1 then
+                ClearPedProp(ped, propSlot)
+            else
+                SetPedPropIndex(ped, propSlot, drawable, texture, false)
+            end
+        end
+    end
+end
+
+local function applyHeadOverlays(ped, overlays)
+    if type(overlays) ~= 'table' then
+        return
+    end
+
+    for overlayId, overlayData in pairs(overlays) do
+        local overlayIndex = tonumber(overlayId)
+        if overlayIndex and overlayIndex >= 0 and overlayIndex <= 12 and type(overlayData) == 'table' then
+            local style = tonumber(overlayData.style) or 0
+            local opacity = tonumber(overlayData.opacity) or 0.0
+
+            SetPedHeadOverlay(ped, overlayIndex, style, opacity + 0.0)
+
+            local overlayConfig = Config.HeadOverlays[overlayIndex]
+            if overlayConfig and overlayConfig.colorType > 0 and overlayData.color ~= nil then
+                SetPedHeadOverlayColor(
+                    ped,
+                    overlayIndex,
+                    overlayConfig.colorType,
+                    tonumber(overlayData.color) or 0,
+                    tonumber(overlayData.secondColor or overlayData.color) or 0
+                )
+            end
+        end
+    end
+end
+
+local function applyHair(ped, hair)
+    if type(hair) ~= 'table' then
+        return
+    end
+
+    SetPedComponentVariation(ped, 2, tonumber(hair.style) or 0, 0, 0)
+    SetPedHairColor(ped, tonumber(hair.color) or 0, tonumber(hair.highlight) or 0)
+end
+
+local function applyEyeColor(ped, eyes)
+    if type(eyes) ~= 'table' then
+        return
+    end
+
+    SetPedEyeColor(ped, tonumber(eyes.color) or 0)
+end
+
 function Appearance.Apply(appearance)
     local ped = PlayerPedId()
     appearance = Appearance.Normalize(appearance)
@@ -123,48 +302,26 @@ function Appearance.Apply(appearance)
         local ok = ClientUtils.LoadModel(appearance.model)
         if not ok then return false, 'failed_model' end
         ped = PlayerPedId()
+
+        if isFreemodePedModel(ped) then
+            SetPedDefaultComponentVariation(ped)
+            SetPedHeadBlendData(ped, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, false)
+        end
+
+        waitForPedVariations(ped)
     end
 
     appearance = Appearance.ClampToPedVariations(appearance, ped)
 
-    local h = appearance.heritage
-    SetPedHeadBlendData(ped, h.shapeFirst, h.shapeSecond, 0, h.skinFirst, h.skinSecond, 0, h.shapeMix + 0.0, h.skinMix + 0.0, 0.0, false)
+    applyComponents(ped, appearance.components)
+    applyProps(ped, appearance.props)
+    applyHeadBlend(ped, appearance.heritage)
+    applyFaceFeatures(ped, appearance.faceFeatures)
+    applyHeadOverlays(ped, appearance.headOverlays)
+    applyHair(ped, appearance.hair)
+    applyEyeColor(ped, appearance.eyes)
 
-    for i = 1, Config.FaceFeatureCount do
-        SetPedFaceFeature(ped, i - 1, appearance.faceFeatures[i] + 0.0)
-    end
-
-    SetPedComponentVariation(ped, 2, appearance.hair.style, 0, 0)
-    SetPedHairColor(ped, appearance.hair.color, appearance.hair.highlight)
-    SetPedEyeColor(ped, appearance.eyes.color)
-
-    for overlayId, overlayData in pairs(appearance.headOverlays) do
-        local overlayIndex = tonumber(overlayId)
-        local style = overlayData.style or 0
-        SetPedHeadOverlay(ped, overlayIndex, style, overlayData.opacity + 0.0)
-        local overlayConfig = Config.HeadOverlays[overlayIndex]
-        if overlayConfig and overlayConfig.colorType > 0 then
-            SetPedHeadOverlayColor(ped, overlayIndex, overlayConfig.colorType, overlayData.color or 0, overlayData.secondColor or 0)
-        end
-    end
-
-    for slot, data in pairs(appearance.components) do
-        local componentSlot = tonumber(slot)
-        if componentSlot ~= 2 then
-            SetPedComponentVariation(ped, componentSlot, data.drawable, data.texture, 0)
-        end
-    end
-
-    for slot, data in pairs(appearance.props) do
-        local propSlot = tonumber(slot)
-        if data.drawable == -1 then
-            ClearPedProp(ped, propSlot)
-        else
-            SetPedPropIndex(ped, propSlot, data.drawable, data.texture, true)
-        end
-    end
-
-    return true, appearance
+    return true, Appearance.HydrateWearablesFromPed(appearance)
 end
 
 function Appearance.Rotate(deltaHeading)
@@ -178,7 +335,7 @@ function Appearance.HydrateWearablesFromPed(appearance)
     local hydrated = Appearance.Normalize(appearance)
 
     for slot in pairs(Config.ComponentSlots or {}) do
-        if slot ~= 2 and hydrated.components[tostring(slot)] == nil then
+        if slot ~= 2 then
             hydrated.components[tostring(slot)] = {
                 drawable = GetPedDrawableVariation(ped, slot),
                 texture = GetPedTextureVariation(ped, slot)
@@ -186,14 +343,21 @@ function Appearance.HydrateWearablesFromPed(appearance)
         end
     end
 
+    hydrated.hair.style = GetPedDrawableVariation(ped, 2)
+    hydrated.hair.color = GetPedHairColor(ped)
+    hydrated.hair.highlight = GetPedHairHighlightColor(ped)
+
+    local eyeColor = GetPedEyeColor(ped)
+    if eyeColor and eyeColor >= 0 then
+        hydrated.eyes.color = eyeColor
+    end
+
     for slot in pairs(Config.PropSlots or {}) do
-        if hydrated.props[tostring(slot)] == nil then
-            local drawable = GetPedPropIndex(ped, slot)
-            hydrated.props[tostring(slot)] = {
-                drawable = drawable,
-                texture = drawable == -1 and 0 or GetPedPropTextureIndex(ped, slot)
-            }
-        end
+        local drawable = GetPedPropIndex(ped, slot)
+        hydrated.props[tostring(slot)] = {
+            drawable = drawable,
+            texture = drawable == -1 and 0 or GetPedPropTextureIndex(ped, slot)
+        }
     end
 
     return hydrated

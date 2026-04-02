@@ -19,6 +19,8 @@ const cameraInputState = {
   raf: 0
 };
 
+let renderFrame = 0;
+
 const sections = [
   { key: 'identity', title: 'Identity & Heritage' },
   { key: 'face', title: 'Face Features' },
@@ -223,6 +225,38 @@ function getPropControls() {
   }));
 }
 
+function ensureOverlayState(id) {
+  state.appearance.headOverlays = state.appearance.headOverlays || {};
+  state.appearance.headOverlays[id] = state.appearance.headOverlays[id] || {
+    style: 0,
+    opacity: 0,
+    color: 0,
+    secondColor: 0
+  };
+
+  return state.appearance.headOverlays[id];
+}
+
+function ensureComponentState(slot) {
+  state.appearance.components = state.appearance.components || {};
+  state.appearance.components[slot] = state.appearance.components[slot] || {
+    drawable: 0,
+    texture: 0
+  };
+
+  return state.appearance.components[slot];
+}
+
+function ensurePropState(slot) {
+  state.appearance.props = state.appearance.props || {};
+  state.appearance.props[slot] = state.appearance.props[slot] || {
+    drawable: -1,
+    texture: 0
+  };
+
+  return state.appearance.props[slot];
+}
+
 function getTextureMax(control, drawable) {
   const raw = control?.textureMaxByDrawable?.[String(drawable)];
   if (Number.isFinite(raw)) {
@@ -245,6 +279,10 @@ function getMaxOptionValue(options, fallback = 0) {
 
 function findOption(options, value) {
   return (options || []).find((option) => valueMatches(option.value, value)) || null;
+}
+
+function getOptionIndex(options, value) {
+  return (options || []).findIndex((option) => valueMatches(option.value, value));
 }
 
 function clampAppearanceForCurrentProfile() {
@@ -400,6 +438,19 @@ function renderCameraButtons() {
   });
 }
 
+function scheduleRender() {
+  if (renderFrame) {
+    return;
+  }
+
+  renderFrame = window.requestAnimationFrame(() => {
+    renderFrame = 0;
+    if (state.open) {
+      render();
+    }
+  });
+}
+
 function controlWrapper(label, inner) {
   const card = document.createElement('div');
   card.className = 'control';
@@ -411,27 +462,23 @@ function controlWrapper(label, inner) {
 function rangeControl(label, min, max, step, value, onInput) {
   const wrapper = document.createElement('div');
   wrapper.innerHTML = `
-    <div class="meta"><span>${label}</span><span>${Number(value).toFixed(2)}</span></div>
+    <div class="meta value-only"><span>${Number(value).toFixed(2)}</span></div>
     <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" />
   `;
   const input = wrapper.querySelector('input');
-  input.oninput = (e) => {
-    wrapper.querySelector('.meta span:last-child').textContent = Number(e.target.value).toFixed(2);
-    onInput(parseFloat(e.target.value));
+  const handleInput = (rawValue) => {
+    wrapper.querySelector('.meta span').textContent = Number(rawValue).toFixed(2);
+    onInput(parseFloat(rawValue));
   };
+
+  input.oninput = (e) => handleInput(e.target.value);
+  input.onchange = (e) => handleInput(e.target.value);
   return controlWrapper(label, wrapper);
 }
 
 function selectControl(label, options, value, onInput, extra = {}) {
+  const normalizedOptions = Array.isArray(options) ? options : [];
   const wrapper = document.createElement('div');
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-
-  const selectedLabel = document.createElement('span');
-  const selectedValue = document.createElement('span');
-  meta.appendChild(selectedLabel);
-  meta.appendChild(selectedValue);
-  wrapper.appendChild(meta);
 
   const previewRow = document.createElement('div');
   previewRow.className = 'choice-preview hidden';
@@ -444,22 +491,44 @@ function selectControl(label, options, value, onInput, extra = {}) {
   previewRow.appendChild(hint);
   wrapper.appendChild(previewRow);
 
-  const select = document.createElement('select');
-  (options || []).forEach((opt) => {
-    const option = document.createElement('option');
-    option.value = opt.value;
-    option.textContent = opt.label;
-    if (valueMatches(opt.value, value)) option.selected = true;
-    select.appendChild(option);
-  });
+  const choiceNav = document.createElement('div');
+  choiceNav.className = 'choice-nav';
+
+  const prevButton = document.createElement('button');
+  prevButton.type = 'button';
+  prevButton.className = 'choice-button';
+  prevButton.textContent = 'Prev';
+
+  const currentDisplay = document.createElement('div');
+  currentDisplay.className = 'choice-current';
+
+  const nextButton = document.createElement('button');
+  nextButton.type = 'button';
+  nextButton.className = 'choice-button';
+  nextButton.textContent = 'Next';
+
+  choiceNav.appendChild(prevButton);
+  choiceNav.appendChild(currentDisplay);
+  choiceNav.appendChild(nextButton);
+  wrapper.appendChild(choiceNav);
+
+  let currentIndex = Math.max(0, getOptionIndex(normalizedOptions, value));
+
+  const emitValue = (rawValue) => {
+    return typeof extra.parseValue === 'function'
+      ? extra.parseValue(rawValue)
+      : rawValue;
+  };
 
   const syncDisplay = (rawValue) => {
-    const current = findOption(options, rawValue);
-    selectedLabel.textContent = current?.label || extra.fallbackLabel || String(rawValue);
-    selectedValue.textContent = typeof extra.valueText === 'function' ? extra.valueText(rawValue, current) : '';
+    const matchedIndex = getOptionIndex(normalizedOptions, rawValue);
+    currentIndex = matchedIndex >= 0 ? matchedIndex : Math.max(0, currentIndex);
 
-    const swatchHex = typeof extra.getSwatch === 'function' ? extra.getSwatch(current, rawValue) : '';
-    const hintText = typeof extra.getHint === 'function' ? extra.getHint(current, rawValue) : '';
+    const current = normalizedOptions[currentIndex] || null;
+    const effectiveValue = current ? current.value : rawValue;
+
+    const swatchHex = typeof extra.getSwatch === 'function' ? extra.getSwatch(current, effectiveValue) : '';
+    const hintText = typeof extra.getHint === 'function' ? extra.getHint(current, effectiveValue) : '';
     previewRow.classList.toggle('hidden', !swatchHex && !hintText);
 
     if (swatchHex) {
@@ -470,19 +539,48 @@ function selectControl(label, options, value, onInput, extra = {}) {
     }
 
     hint.textContent = hintText || '';
+    currentDisplay.textContent = normalizedOptions.length > 0
+      ? (typeof extra.valueText === 'function'
+        ? extra.valueText(effectiveValue, current)
+        : (current?.label || extra.fallbackLabel || String(effectiveValue)))
+      : 'No options';
+    prevButton.disabled = currentIndex <= 0 || normalizedOptions.length <= 1;
+    nextButton.disabled = currentIndex >= (normalizedOptions.length - 1) || normalizedOptions.length <= 1;
+  };
+
+  const commitOption = (option) => {
+    if (!option) {
+      return;
+    }
+
+    syncDisplay(option.value);
+    onInput(emitValue(option.value));
   };
 
   syncDisplay(value);
 
-  select.onchange = (e) => {
-    const parsedValue = typeof extra.parseValue === 'function'
-      ? extra.parseValue(e.target.value)
-      : e.target.value;
-    syncDisplay(parsedValue);
-    onInput(parsedValue);
+  prevButton.onclick = () => {
+    if (currentIndex <= 0) {
+      return;
+    }
+
+    commitOption(normalizedOptions[currentIndex - 1]);
   };
 
-  wrapper.appendChild(select);
+  nextButton.onclick = () => {
+    if (currentIndex >= normalizedOptions.length - 1) {
+      return;
+    }
+
+    commitOption(normalizedOptions[currentIndex + 1]);
+  };
+
+  if (!normalizedOptions.length) {
+    currentDisplay.textContent = 'No options';
+    prevButton.disabled = true;
+    nextButton.disabled = true;
+  };
+
   return controlWrapper(label, wrapper);
 }
 
@@ -507,7 +605,7 @@ function renderIdentity(container) {
   container.appendChild(selectControl('Model', getModelOptions(), state.appearance.model, (v) => {
     state.appearance.model = v;
     clampAppearanceForCurrentProfile();
-    render();
+    scheduleRender();
     preview();
   }));
 
@@ -567,25 +665,29 @@ function renderOverlays(container) {
   getOverlayControls().forEach((control) => {
     const id = String(control.id);
     const label = control.label || titleize(id);
-    state.appearance.headOverlays[id] = state.appearance.headOverlays[id] || { style: 0, opacity: 0, color: 0, secondColor: 0 };
-    const overlay = state.appearance.headOverlays[id];
+    const overlay = ensureOverlayState(id);
     const styleOptions = Array.isArray(control.styleOptions) && control.styleOptions.length
       ? control.styleOptions
       : buildIndexedOptions(255, `${label} Style`);
 
     container.appendChild(namedNumberSelect(`${label} Style`, styleOptions, overlay.style, (v) => {
-      overlay.style = v;
+      const nextOverlay = ensureOverlayState(id);
+      nextOverlay.style = v;
+      if (v > 0 && nextOverlay.opacity <= 0) {
+        nextOverlay.opacity = 0.6;
+        scheduleRender();
+      }
       preview();
     }));
 
     container.appendChild(rangeControl(`${label} Opacity`, 0, 1, 0.01, overlay.opacity, (v) => {
-      overlay.opacity = v;
+      ensureOverlayState(id).opacity = v;
       preview();
     }));
 
     if ((control.colorType || 0) > 0) {
       container.appendChild(colorSelect(`${label} Color`, hairColors, overlay.color, (v) => {
-        overlay.color = v;
+        ensureOverlayState(id).color = v;
         preview();
       }));
     }
@@ -595,19 +697,19 @@ function renderOverlays(container) {
 function renderClothing(container) {
   getComponentControls().forEach((control) => {
     const slot = String(control.id);
-    state.appearance.components[slot] = state.appearance.components[slot] || { drawable: 0, texture: 0 };
-    const component = state.appearance.components[slot];
+    const component = ensureComponentState(slot);
     const label = control.label || `Component ${slot}`;
 
     container.appendChild(namedNumberSelect(`${label} Item`, control.drawableOptions, component.drawable, (v) => {
-      component.drawable = v;
-      component.texture = Math.min(component.texture, getTextureMax(control, v));
-      render();
+      const nextComponent = ensureComponentState(slot);
+      nextComponent.drawable = v;
+      nextComponent.texture = 0;
+      scheduleRender();
       preview();
     }));
 
     container.appendChild(namedNumberSelect(`${label} Texture`, buildTextureOptions(getTextureMax(control, component.drawable)), component.texture, (v) => {
-      component.texture = v;
+      ensureComponentState(slot).texture = v;
       preview();
     }, {
       fallbackLabel: 'Texture',
@@ -617,21 +719,21 @@ function renderClothing(container) {
 
   getPropControls().forEach((control) => {
     const slot = String(control.id);
-    state.appearance.props[slot] = state.appearance.props[slot] || { drawable: -1, texture: 0 };
-    const prop = state.appearance.props[slot];
+    const prop = ensurePropState(slot);
     const label = control.label || `Prop ${slot}`;
 
     container.appendChild(namedNumberSelect(`${label} Item`, control.drawableOptions, prop.drawable, (v) => {
-      prop.drawable = v;
-      prop.texture = v === -1 ? 0 : Math.min(prop.texture, getTextureMax(control, v));
-      render();
+      const nextProp = ensurePropState(slot);
+      nextProp.drawable = v;
+      nextProp.texture = 0;
+      scheduleRender();
       preview();
     }, {
       valueText: (raw) => raw === -1 ? 'Clear' : `#${raw}`
     }));
 
     container.appendChild(namedNumberSelect(`${label} Texture`, buildTextureOptions(prop.drawable === -1 ? 0 : getTextureMax(control, prop.drawable)), prop.texture, (v) => {
-      prop.texture = v;
+      ensurePropState(slot).texture = v;
       preview();
     }, {
       fallbackLabel: 'Texture',
@@ -672,14 +774,29 @@ function render() {
 }
 
 let previewTimer = null;
+let previewSequence = 0;
 function preview() {
   clearTimeout(previewTimer);
+  const requestId = ++previewSequence;
+
   previewTimer = setTimeout(() => {
-    nui('preview', { appearance: state.appearance }).then((response) => {
-      if (response?.ok && response.appearance) {
-        state.appearance = response.appearance;
+    const appearanceSnapshot = deepClone(state.appearance || {});
+    const snapshotKey = JSON.stringify(appearanceSnapshot);
+    nui('preview', { appearance: appearanceSnapshot }).then((response) => {
+      if (!state.open || requestId !== previewSequence) {
+        return;
       }
-    });
+
+      if (response?.ok && response.appearance) {
+        const responseKey = JSON.stringify(response.appearance);
+
+        if (responseKey !== snapshotKey) {
+          state.appearance = response.appearance;
+          clampAppearanceForCurrentProfile();
+          scheduleRender();
+        }
+      }
+    }).catch(() => {});
   }, 40);
 }
 
